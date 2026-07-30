@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# offline agent (agent/)
+__pycache__/
+*.pyc
+.agent/sessions/
+.agent/tasks.json
+.venv/
