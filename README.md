@@ -1,4 +1,63 @@
-# Agent — an offline, extensible agent + second brain
+# DHC-WEB
+
+This repo holds two independent projects:
+
+- [`src/`](#hive-mind-web-app) — **Hive Mind**, a Next.js multi-agent web app built on the Claude API.
+- [`agent/`](#agent--an-offline-extensible-agent--second-brain) — **Agent**, an offline, extensible agent + second brain that runs against local models.
+
+---
+
+## Hive Mind (web app)
+
+A multi-agent AI orchestration system: a task is dropped into a shared
+"blackboard," a set of specialized Claude agents each contribute to it in
+turn, and a final Synthesizer agent reconciles everything into one answer.
+
+### Agents
+
+| Agent | Role |
+| --- | --- |
+| Researcher | Surfaces relevant facts, background, and constraints |
+| Analyst | Proposes concrete approaches or solutions |
+| Critic | Finds flaws, risks, and edge cases in what's on the blackboard |
+| Synthesizer | Produces the final answer from everything the others contributed |
+
+Each agent (`src/lib/hivemind/agents.ts`) is just a system prompt and a
+label. The orchestrator (`src/lib/hivemind/orchestrator.ts`) runs the
+worker agents in sequence, appending each one's output to the blackboard
+so later agents can build on earlier ones, then runs the Synthesizer over
+the full blackboard.
+
+### Running locally
+
+```bash
+npm install
+cp .env.example .env.local   # add your ANTHROPIC_API_KEY
+npm run dev
+```
+
+Open http://localhost:3000, describe a task, and submit it to see each
+agent's contribution plus the synthesized final answer.
+
+### API
+
+`POST /api/hive-mind` with `{ "task": "..." }` returns:
+
+```json
+{
+  "task": "...",
+  "contributions": [
+    { "role": "researcher", "label": "Researcher", "content": "..." },
+    { "role": "analyst", "label": "Analyst", "content": "..." },
+    { "role": "critic", "label": "Critic", "content": "..." }
+  ],
+  "synthesis": "..."
+}
+```
+
+---
+
+## Agent — an offline, extensible agent + second brain
 
 A Fable-5-style agent framework that runs **fully offline** against local
 models (via [Ollama](https://ollama.com)), built in pure Python with **zero
@@ -20,7 +79,7 @@ links, and retrieves from across sessions.
                                └─────────────────────────────────┘
 ```
 
-## Quick start
+### Quick start
 
 ```bash
 # offline (default): needs Ollama + a tool-capable model
@@ -35,7 +94,7 @@ python -m agent --backend echo -p 'hello'
 
 Requires Python 3.10+. Nothing to `pip install`.
 
-## The second brain
+### The second brain
 
 Notes are plain markdown in `brain/` — greppable, git-friendly, and
 compatible with Obsidian-style `[[wiki links]]`. The agent uses it via
@@ -54,7 +113,7 @@ fact memory (`remember`/`recall`/`forget`) that is injected into the system
 prompt every session. Load the `second-brain` skill (`/skill second-brain`)
 for a full capture→organize→connect→retrieve workflow.
 
-## Adding a tool
+### Adding a tool
 
 Drop a typed, documented function in `.agent/tools/*.py` (auto-loaded) or in
 `agent/tools/`:
@@ -74,7 +133,7 @@ The JSON schema the model sees is derived from the signature and docstring.
 Mark side-effecting tools `@tool(dangerous=True)` and the REPL will ask
 before running them.
 
-## Adding a skill
+### Adding a skill
 
 Skills are packaged instructions in markdown — new capabilities without code.
 Create `skills/<name>/SKILL.md`:
@@ -91,7 +150,7 @@ markdown changelog section.
 Invoke with `/skill changelog` (or `--skill changelog` on the CLI). Bundled
 skills: `second-brain`, `code-review`, `summarize`, `commit-message`.
 
-## Built-in tools
+### Built-in tools
 
 | Area | Tools |
 |---|---|
@@ -105,7 +164,7 @@ skills: `second-brain`, `code-review`, `summarize`, `commit-message`.
 All file tools are sandboxed to the working directory; sessions persist to
 `.agent/sessions/` and can be resumed with `/resume`.
 
-## Configuration
+### Configuration
 
 `~/.agent/config.json` (user) or `.agent/config.json` (project), overridable
 via `AGENT_*` env vars:
@@ -124,7 +183,7 @@ via `AGENT_*` env vars:
 Set `"backend": "anthropic"` + `ANTHROPIC_API_KEY` to use the Claude API
 when online — same tools, same skills, same brain.
 
-## Tests
+### Tests
 
 ```bash
 python -m unittest discover tests -v
