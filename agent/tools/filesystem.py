@@ -6,16 +6,8 @@ rejected so the model can't wander the host filesystem.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from . import tool
-
-
-def _resolve(ctx, path: str) -> Path:
-    p = (ctx.config.workdir / path).resolve()
-    if not p.is_relative_to(ctx.config.workdir):
-        raise ValueError(f"path escapes working directory: {path}")
-    return p
+from ._paths import glob_in, resolve_in_workdir as _resolve
 
 
 @tool()
@@ -64,6 +56,6 @@ def list_dir(ctx, path: str = ".") -> str:
 def glob_files(ctx, pattern: str) -> str:
     """Find files matching a glob pattern like '**/*.py', relative to the workdir."""
     root = ctx.config.workdir
-    hits = [str(p.relative_to(root)) for p in sorted(root.glob(pattern)) if p.is_file()]
+    hits = [str(p.resolve().relative_to(root)) for p in glob_in(ctx, root, pattern)]
     hits = [h for h in hits if not h.startswith((".git/", ".agent/"))]
     return "\n".join(hits[:500]) or "(no matches)"

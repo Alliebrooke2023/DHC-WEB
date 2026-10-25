@@ -92,6 +92,62 @@ class ToolTests(unittest.TestCase):
         out = dispatch(self.ctx, "grep", {"pattern": "def hello"})
         self.assertIn("x.py:1", out)
 
+    def test_glob_finds_files_in_workdir(self):
+        (self.dir / "a.py").write_text("x = 1\n")
+        (self.dir / "sub").mkdir()
+        (self.dir / "sub" / "b.py").write_text("y = 2\n")
+        out = dispatch(self.ctx, "glob_files", {"pattern": "**/*.py"})
+        self.assertIn("a.py", out)
+        self.assertIn("b.py", out)
+
+
+class SandboxEscapeTests(unittest.TestCase):
+    """A glob pattern is as attacker-controlled as a path: it must not escape.
+
+    These cover the sandbox hole where `path` was validated but `glob` was
+    passed to rglob()/glob() untouched, so '../*' walked straight out of
+    the workdir — and in grep's case read the contents of what it found.
+    """
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.outside = Path(tempfile.mkdtemp())
+        (self.outside / "SECRET.txt").write_text("sk-ant-live-CREDENTIAL\n")
+        self.agent = make_agent(self.dir)
+        self.ctx = self.agent.ctx
+        # From the workdir, this pattern points at the secret outside it.
+        self.escape = f"../{self.outside.name}/*"
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+        shutil.rmtree(self.outside, ignore_errors=True)
+
+    def test_glob_files_pattern_cannot_escape(self):
+        out = dispatch(self.ctx, "glob_files", {"pattern": self.escape})
+        self.assertNotIn("SECRET", out)
+
+    def test_grep_glob_cannot_escape_or_leak_contents(self):
+        out = dispatch(self.ctx, "grep", {"pattern": "sk-ant-live", "glob": self.escape})
+        self.assertNotIn("sk-ant-live", out)
+        self.assertNotIn("SECRET", out)
+
+    def test_grep_deep_traversal_glob_cannot_escape(self):
+        out = dispatch(self.ctx, "grep", {"pattern": "sk-ant-live", "glob": "../../**/*.txt"})
+        self.assertNotIn("sk-ant-live", out)
+
+    def test_grep_path_escape_still_rejected(self):
+        out = dispatch(self.ctx, "grep", {"pattern": ".", "path": "../.."})
+        self.assertIn("ERROR", out)
+
+    def test_absolute_glob_pattern_rejected(self):
+        for tool_name, args in (
+            ("glob_files", {"pattern": "/etc/*"}),
+            ("grep", {"pattern": ".", "glob": "/etc/*"}),
+        ):
+            with self.subTest(tool=tool_name):
+                out = dispatch(self.ctx, tool_name, args)
+                self.assertNotIn("/etc/passwd", out)
+
 
 class BrainTests(unittest.TestCase):
     def setUp(self):
