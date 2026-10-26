@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from . import tool
+from ._paths import glob_in, resolve_in_workdir
 
 _SKIP_DIRS = {".git", ".agent", "node_modules", "__pycache__", ".venv", "venv"}
 
@@ -17,13 +18,15 @@ def grep(ctx, pattern: str, path: str = ".", glob: str = "*", max_results: int =
     except re.error as e:
         return f"ERROR: invalid regex: {e}"
 
-    root = (ctx.config.workdir / path).resolve()
-    if not root.is_relative_to(ctx.config.workdir):
+    try:
+        root = resolve_in_workdir(ctx, path)
+        files = glob_in(ctx, root, glob, recursive=True)
+    except ValueError:
         return "ERROR: path escapes working directory"
 
     out = []
-    for f in sorted(root.rglob(glob)):
-        if not f.is_file() or any(part in _SKIP_DIRS for part in f.parts):
+    for f in files:
+        if any(part in _SKIP_DIRS for part in f.parts):
             continue
         try:
             text = f.read_text(errors="strict")
