@@ -1,5 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { SYNTHESIZER_AGENT, WORKER_AGENTS, type AgentSpec } from "./agents";
+import {
+  LEAD_AGENT,
+  PARALLEL_AGENTS,
+  SYNTHESIZER_AGENT,
+  type AgentSpec,
+} from "./agents";
 
 const MODEL = process.env.HIVE_MIND_MODEL ?? "claude-sonnet-5";
 const MAX_TOKENS = 1024;
@@ -52,19 +57,31 @@ async function runAgent(
 }
 
 /**
- * Runs the worker agents sequentially (each one reads the prior agents'
- * output off the shared blackboard) and then a synthesizer that reconciles
- * everything into a single final answer.
+ * Runs the Researcher first to seed the blackboard, then fans out to the
+ * agents that only depend on those notes (Analyst, Critic) concurrently,
+ * and finally runs the Synthesizer over the full blackboard. That is three
+ * sequential round-trips instead of four, without any agent losing context
+ * it actually reads.
  */
 export async function runHiveMind(task: string): Promise<HiveMindResult> {
   const client = getClient();
-  const blackboard: AgentContribution[] = [];
 
-  for (const agent of WORKER_AGENTS) {
-    const content = await runAgent(client, agent, task, blackboard);
-    blackboard.push({ role: agent.role, label: agent.label, content });
-  }
+  const research = await runAgent(client, LEAD_AGENT, task, []);
+  const notes: AgentContribution[] = [
+    { role: LEAD_AGENT.role, label: LEAD_AGENT.label, content: research },
+  ];
 
+  // Promise.all resolves in input order, so the blackboard stays in the
+  // declared agent order regardless of which request finishes first.
+  const parallel = await Promise.all(
+    PARALLEL_AGENTS.map(async (agent) => ({
+      role: agent.role,
+      label: agent.label,
+      content: await runAgent(client, agent, task, notes),
+    })),
+  );
+
+  const blackboard = [...notes, ...parallel];
   const synthesis = await runAgent(client, SYNTHESIZER_AGENT, task, blackboard);
 
   return { task, contributions: blackboard, synthesis };
