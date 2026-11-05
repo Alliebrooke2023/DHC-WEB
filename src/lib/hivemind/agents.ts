@@ -7,20 +7,26 @@ export interface AgentSpec {
 }
 
 /**
- * Each agent gets the raw task plus the "blackboard" (the other agents'
- * findings so far) so the hive can build on shared context instead of
- * working in isolation.
+ * The Researcher opens the blackboard: it runs first, on the raw task, and
+ * its notes become the shared context every later agent reads.
  */
-export const WORKER_AGENTS: AgentSpec[] = [
-  {
-    role: "researcher",
-    label: "Researcher",
-    systemPrompt:
-      "You are the Researcher in a multi-agent hive mind. Given a task, " +
-      "lay out the relevant facts, background, and constraints. Be concrete " +
-      "and concise. Do not solve the task yourself, just surface what a " +
-      "solver would need to know.",
-  },
+export const LEAD_AGENT: AgentSpec = {
+  role: "researcher",
+  label: "Researcher",
+  systemPrompt:
+    "You are the Researcher in a multi-agent hive mind. Given a task, " +
+    "lay out the relevant facts, background, and constraints. Be concrete " +
+    "and concise. Do not solve the task yourself, just surface what a " +
+    "solver would need to know.",
+};
+
+/**
+ * These agents each read the task plus the Researcher's notes, but not each
+ * other's output, so the orchestrator runs them concurrently. Keep them
+ * mutually independent — anything that needs to react to another worker's
+ * contribution belongs in the Synthesizer instead.
+ */
+export const PARALLEL_AGENTS: AgentSpec[] = [
   {
     role: "analyst",
     label: "Analyst",
@@ -34,11 +40,16 @@ export const WORKER_AGENTS: AgentSpec[] = [
     label: "Critic",
     systemPrompt:
       "You are the Critic in a multi-agent hive mind. Given a task and the " +
-      "blackboard so far (research notes and proposed approaches), find " +
-      "flaws, risks, and edge cases. Be direct and specific; do not " +
-      "restate what's already correct.",
+      "Researcher's notes on the shared blackboard, find the flaws, risks, " +
+      "and edge cases that any proposed solution will have to survive. You " +
+      "are working in parallel with the Analyst, so you will not see their " +
+      "proposal — critique the task and the research itself rather than " +
+      "reviewing a specific approach. Be direct and specific.",
   },
 ];
+
+/** Display order for the blackboard: the lead agent, then the parallel pair. */
+export const WORKER_AGENTS: AgentSpec[] = [LEAD_AGENT, ...PARALLEL_AGENTS];
 
 export const SYNTHESIZER_AGENT: AgentSpec = {
   role: "synthesizer",
